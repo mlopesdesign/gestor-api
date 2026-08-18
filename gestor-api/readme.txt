@@ -4,7 +4,7 @@ Tags: rest-api, gestor, sync
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 8.0
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: Proprietary
 License URI: https://mlopesdesign.com.br
 
@@ -66,6 +66,10 @@ Nao nesta versao. O sync com o desktop esta BLOQUEADO ate Marcio liberar (ver `A
 
 == Changelog ==
 
+= 0.1.2 = 2026-08-18 =
+* FIX: 500 em /wp-json/ por causa de `Declaration of ... get_item(WP_REST_Request $request) must be compatible with WP_REST_Controller::get_item($request)`. PHP 8 nao permite parametro mais especifico que o pai; removido o type hint de `WP_REST_Request` em 16 metodos (get_item, create_item, update_item, delete_item em 4 controllers: tarefas, projetos, clientes, areas)
+* CHG: bump de versao (regra PADRÃO-ML-LOPES-DESIGN.md §12)
+
 = 0.1.1 = 2026-08-18 =
 * FIX: 500 em /wp-json/gestor/v1/ por causa de `const NAMESPACE = GESTOR_API_NAMESPACE` (constante global em const de classe quebra em PHP 8.0)
 * FIX: 500 em /wp-json/gestor/v1/ por causa de `const CURRENT_VERSION = GESTOR_API_VERSION` (mesmo motivo)
@@ -88,6 +92,9 @@ Nao nesta versao. O sync com o desktop esta BLOQUEADO ate Marcio liberar (ver `A
 * Documentacao em docs/GUIA-API.md
 
 == Upgrade Notice ==
+
+= 0.1.2 =
+Bugfix de 500 fatal em TODO o WP (nao so no namespace gestor). Atualize imediatamente.
 
 = 0.1.1 =
 Bugfix de 500 fatal no namespace REST. Atualize imediatamente.

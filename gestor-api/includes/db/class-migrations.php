@@ -18,7 +18,7 @@ defined('ABSPATH') || exit;
  */
 final class Migrations
 {
-    public const CURRENT_VERSION = '0.1.1';
+    public const CURRENT_VERSION = '0.1.2';
 
     /**
      * Retorna versao atual do schema no banco.

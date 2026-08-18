@@ -83,7 +83,7 @@ final class Rest_Areas_Controller extends Rest_Controller
         ]);
     }
 
-    public function get_item(WP_REST_Request $request): WP_REST_Response|\WP_Error
+    public function get_item($request): WP_REST_Response|\WP_Error
     {
         $sessao = Rest_Auth_Controller::$current_sessao;
         if ($sessao === null) {
@@ -98,17 +98,17 @@ final class Rest_Areas_Controller extends Rest_Controller
         return $this->ok(Area::to_dto($row));
     }
 
-    public function create_item(WP_REST_Request $request): WP_REST_Response|\WP_Error
+    public function create_item($request): WP_REST_Response|\WP_Error
     {
         return $this->upsert($request);
     }
 
-    public function update_item(WP_REST_Request $request): WP_REST_Response|\WP_Error
+    public function update_item($request): WP_REST_Response|\WP_Error
     {
         return $this->upsert($request, (string) $request['id']);
     }
 
-    public function delete_item(WP_REST_Request $request): WP_REST_Response|\WP_Error
+    public function delete_item($request): WP_REST_Response|\WP_Error
     {
         $sessao = Rest_Auth_Controller::$current_sessao;
         if ($sessao === null) {

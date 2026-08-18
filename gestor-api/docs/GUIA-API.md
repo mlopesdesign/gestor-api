@@ -1,4 +1,4 @@
-# Guia da API REST — Gestor API v0.1.1
+﻿# Guia da API REST — Gestor API v0.1.2
 
 > Plugin WP que expoe a API REST do Gestor Inteligente de Demandas.
 > URL base: `https://tools.mlopesdesign.com.br/wp-json/gestor/v1/`
@@ -29,7 +29,7 @@ curl -X POST https://tools.mlopesdesign.com.br/wp-json/gestor/v1/auth/login \
     "senha": "Ml@2026gestor",
     "dispositivo_id": "android-abc123",
     "sistema": "ANDROID",
-    "app_versao": "0.1.1"
+    "app_versao": "0.1.2"
   }'
 ```
 
@@ -405,4 +405,4 @@ Em `Tools > Gestor API` (requer capability `gestor_api_manage`):
 ---
 
 *ML Lopes Design · Marcio · mlopesdesign@gmail.com · mlopesdesign.com.br*
-*Versao 0.1.1 · 2026-08-18 · Stack: PHP 8 + WordPress 6 + MySQL · Custo R$ 0,00*
+*Versao 0.1.2 · 2026-08-18 · Stack: PHP 8 + WordPress 6 + MySQL · Custo R$ 0,00*
