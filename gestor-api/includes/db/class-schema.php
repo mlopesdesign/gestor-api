@@ -305,32 +305,40 @@ final class Schema
 
     /**
      * Cria triggers de invariante (auditoria append-only).
+     *
+     * IMPORTANTE: $wpdb->query() usa mysqli_query() que NAO suporta multi-statement.
+     * Cada DROP e cada CREATE TRIGGER sao chamados SEPARADAMENTE.
+     * O CREATE TRIGGER com BEGIN...END eh 1 statement unico (BEGIN/END nao sao statements).
      */
     private static function install_triggers(string $prefix): void
     {
         global $wpdb;
 
-        // Trigger de BEFORE DELETE na auditoria: SIGNAL SQLSTATE 45000.
-        $trigger_delete = "DROP TRIGGER IF EXISTS `{$prefix}trg_auditoria_no_delete`;
-            CREATE TRIGGER `{$prefix}trg_auditoria_no_delete`
+        // BEFORE DELETE: bloqueia DELETE em auditoria.
+        $wpdb->query("DROP TRIGGER IF EXISTS `{$prefix}trg_auditoria_no_delete`");
+        $trigger_delete_sql = "CREATE TRIGGER `{$prefix}trg_auditoria_no_delete`
             BEFORE DELETE ON `{$prefix}auditoria`
             FOR EACH ROW
             BEGIN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'auditoria: append-only';
             END";
+        $r1 = $wpdb->query($trigger_delete_sql);
+        if ($r1 === false) {
+            error_log('[gestor-api] Falha ao criar trigger trg_auditoria_no_delete: ' . $wpdb->last_error);
+        }
 
-        $trigger_update = "DROP TRIGGER IF EXISTS `{$prefix}trg_auditoria_no_update`;
-            CREATE TRIGGER `{$prefix}trg_auditoria_no_update`
+        // BEFORE UPDATE: bloqueia UPDATE em auditoria.
+        $wpdb->query("DROP TRIGGER IF EXISTS `{$prefix}trg_auditoria_no_update`");
+        $trigger_update_sql = "CREATE TRIGGER `{$prefix}trg_auditoria_no_update`
             BEFORE UPDATE ON `{$prefix}auditoria`
             FOR EACH ROW
             BEGIN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'auditoria: append-only';
             END";
-
-        // @phpstan-ignore-next-line — $wpdb->query aceita multi-statement.
-        $wpdb->query($trigger_delete);
-        // @phpstan-ignore-next-line
-        $wpdb->query($trigger_update);
+        $r2 = $wpdb->query($trigger_update_sql);
+        if ($r2 === false) {
+            error_log('[gestor-api] Falha ao criar trigger trg_auditoria_no_update: ' . $wpdb->last_error);
+        }
     }
 
     /**

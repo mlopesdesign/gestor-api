@@ -4,7 +4,7 @@ Tags: rest-api, gestor, sync
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 8.0
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: Proprietary
 License URI: https://mlopesdesign.com.br
 
@@ -66,6 +66,11 @@ Nao nesta versao. O sync com o desktop esta BLOQUEADO ate Marcio liberar (ver `A
 
 == Changelog ==
 
+= 0.1.3 = 2026-08-18 =
+* FIX: triggers de auditoria append-only NAO eram criados. Causa: `$wpdb->query()` usa `mysqli_query()` que NAO aceita multi-statement. `install_triggers()` mandava `DROP TRIGGER` + `CREATE TRIGGER` na mesma string. Fix: separar em 2 chamadas (`DROP` em uma, `CREATE` em outra — `BEGIN...END` eh 1 statement unico)
+* FIX: prefixo da tabela eh `wptools_` (customizado pelo WP) nao `wp_`. Documentado em `docs/GUIA-API.md`
+* CHG: bump de versao (regra PADRAO-ML-LOPES-DESIGN.md §12)
+
 = 0.1.2 = 2026-08-18 =
 * FIX: 500 em /wp-json/ por causa de `Declaration of ... get_item(WP_REST_Request $request) must be compatible with WP_REST_Controller::get_item($request)`. PHP 8 nao permite parametro mais especifico que o pai; removido o type hint de `WP_REST_Request` em 16 metodos (get_item, create_item, update_item, delete_item em 4 controllers: tarefas, projetos, clientes, areas)
 * CHG: bump de versao (regra PADRÃO-ML-LOPES-DESIGN.md §12)
@@ -92,6 +97,9 @@ Nao nesta versao. O sync com o desktop esta BLOQUEADO ate Marcio liberar (ver `A
 * Documentacao em docs/GUIA-API.md
 
 == Upgrade Notice ==
+
+= 0.1.3 =
+Bugfix dos triggers de auditoria (instalacao nao quebrava por multi-statement, mas os triggers nao existiam). Atualize AGORA pra garantir auditoria append-only.
 
 = 0.1.2 =
 Bugfix de 500 fatal em TODO o WP (nao so no namespace gestor). Atualize imediatamente.

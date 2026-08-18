@@ -3,7 +3,7 @@
  * Plugin Name:       Gestor API
  * Plugin URI:        https://tools.mlopesdesign.com.br
  * Description:       API REST central do Gestor Inteligente de Demandas. Consumida pelo app Android.
- * Version:           0.1.2
+ * Version:           0.1.3
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            ML Lopes Design
@@ -18,7 +18,7 @@
 declare(strict_types=1);
 
 // Constantes de identidade. NAO MEXER apos o primeiro release.
-define('GESTOR_API_VERSION', '0.1.2');
+define('GESTOR_API_VERSION', '0.1.3');
 define('GESTOR_API_PLUGIN_FILE', __FILE__);
 define('GESTOR_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('GESTOR_API_PLUGIN_URL', plugin_dir_url(__FILE__));
