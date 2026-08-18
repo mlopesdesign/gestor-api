@@ -1,0 +1,6 @@
+# Ignorar artefatos de build
+/_*.zip
+/_*.py
+/_*.php
+.DS_Store
+*.log

@@ -1,0 +1,13 @@
+# Copyright (C) 2026 ML Lopes Design
+# This file is distributed under the Proprietary license.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gestor API 0.1.0\n"
+"Report-Msgid-Bugs-To: https://mlopesdesign.com.br\n"
+"POT-Creation-Date: 2026-08-17 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: gestor-api\n"
+
+# Placeholder para i18n. Strings serao extraidas via wp i18n tools.
