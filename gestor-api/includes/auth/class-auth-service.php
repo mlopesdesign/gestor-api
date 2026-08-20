@@ -52,34 +52,71 @@ final class Auth_Service
             return $e->wp_error;
         }
 
-        // Busca usuario.
-        $usuario = $this->find_usuario_by_email($email);
-        if ($usuario === null) {
-            Logger::warning('login.user_not_found', ['email' => $email]);
-            return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
+        // v0.1.4: tenta WP nativo PRIMEIRO, fallback pra tabela legada.
+        // Usuarios novos: wp_users (com capability gestor_api_use).
+        // Usuarios antigos (criados antes de v0.1.4): wp_gestor_usuarios (legado).
+        $auth_source = null;     // 'wp' | 'legacy'
+        $auth_user_id = null;    // string
+        $auth_user_dto = null;   // array
+
+        // Caminho 1: WP nativo.
+        $wp_user = $this->find_wp_user_by_email($email);
+        if ($wp_user !== null) {
+            // Verifica capability ANTES de validar senha (evita user enumeration).
+            if (!$this->wp_user_can_use_api($wp_user)) {
+                Logger::warning('login.wp_no_capability', ['email' => $email, 'wp_id' => $wp_user->ID]);
+                // Mensagem generica — mesmo erro de credenciais invalidas.
+                return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
+            }
+            // Valida senha contra wp_users.user_pass (phpass).
+            if (!wp_check_password($senha, (string) $wp_user->user_pass, (int) $wp_user->ID)) {
+                Logger::warning('login.wp_wrong_password', ['email' => $email, 'wp_id' => $wp_user->ID]);
+                Logger::audit(
+                    (string) $wp_user->ID,
+                    'auth',
+                    (string) $wp_user->ID,
+                    Logger::ACAO_LOGIN,
+                    ['sucesso' => false, 'motivo' => 'senha_incorreta', 'origem' => 'wp'],
+                    isset($body['dispositivo_id']) ? (string) $body['dispositivo_id'] : null
+                );
+                return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
+            }
+            // OK WP.
+            $auth_source = 'wp';
+            $auth_user_id = (string) $wp_user->ID;
+            $auth_user_dto = $this->wp_user_to_dto($wp_user);
+            Logger::info('login.wp_ok', ['wp_id' => $wp_user->ID, 'email' => $email]);
+        } else {
+            // Caminho 2: legado (wp_gestor_usuarios).
+            $usuario = $this->find_usuario_by_email($email);
+            if ($usuario === null) {
+                Logger::warning('login.user_not_found', ['email' => $email]);
+                return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
+            }
+            // Verifica LGPD legado.
+            if ($usuario['conta_apagada_em'] !== null) {
+                Logger::warning('login.user_deleted', ['email' => $email]);
+                return Response::error('conta_apagada', 'Conta foi apagada', 403);
+            }
+            if (!password_verify($senha, $usuario['senha_hash'])) {
+                Logger::warning('login.wrong_password', ['email' => $email]);
+                Logger::audit(
+                    $usuario['id'],
+                    'auth',
+                    $usuario['id'],
+                    Logger::ACAO_LOGIN,
+                    ['sucesso' => false, 'motivo' => 'senha_incorreta', 'origem' => 'legacy'],
+                    isset($body['dispositivo_id']) ? (string) $body['dispositivo_id'] : null
+                );
+                return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
+            }
+            $auth_source = 'legacy';
+            $auth_user_id = $usuario['id'];
+            $auth_user_dto = $this->legacy_usuario_to_dto($usuario);
+            Logger::info('login.legacy_ok', ['usuario_id' => $usuario['id'], 'email' => $email]);
         }
 
-        // Verifica se conta foi apagada (LGPD).
-        if ($usuario['conta_apagada_em'] !== null) {
-            Logger::warning('login.user_deleted', ['email' => $email]);
-            return Response::error('conta_apagada', 'Conta foi apagada', 403);
-        }
-
-        // Valida senha.
-        if (!password_verify($senha, $usuario['senha_hash'])) {
-            Logger::warning('login.wrong_password', ['email' => $email]);
-            Logger::audit(
-                $usuario['id'],
-                'auth',
-                $usuario['id'],
-                Logger::ACAO_LOGIN,
-                ['sucesso' => false, 'motivo' => 'senha_incorreta'],
-                isset($body['dispositivo_id']) ? (string) $body['dispositivo_id'] : null
-            );
-            return Response::error('credenciais_invalidas', 'Email ou senha incorretos', 401);
-        }
-
-        // Cria sessao.
+        // Cria sessao (sempre via tabela wp_gestor_sessoes, agnostic da origem).
         $meta = [
             'dispositivo_id' => isset($body['dispositivo_id']) ? substr((string) $body['dispositivo_id'], 0, 64) : null,
             'ip' => isset($_SERVER['REMOTE_ADDR']) ? substr((string) $_SERVER['REMOTE_ADDR'], 0, 45) : null,
@@ -87,28 +124,29 @@ final class Auth_Service
         ];
 
         $sessao = $this->tokens->create(
-            $usuario['id'],
+            $auth_user_id,
             GESTOR_API_TOKEN_TTL_DAYS,
             $meta
         );
 
         Logger::info('login.ok', [
-            'usuario_id' => $usuario['id'],
+            'usuario_id' => $auth_user_id,
+            'origem' => $auth_source,
             'sessao_id' => $sessao['id'],
         ]);
         Logger::audit(
-            $usuario['id'],
+            $auth_user_id,
             'auth',
-            $usuario['id'],
+            $auth_user_id,
             Logger::ACAO_LOGIN,
-            ['sucesso' => true, 'sistema' => (string) ($body['sistema'] ?? '')],
+            ['sucesso' => true, 'origem' => $auth_source, 'sistema' => (string) ($body['sistema'] ?? '')],
             $meta['dispositivo_id']
         );
 
         return [
             'token' => $sessao['token'],
             'expira_em' => $sessao['expira_em'],
-            'usuario' => $this->usuario_to_dto($usuario),
+            'usuario' => $auth_user_dto,
         ];
     }
 
@@ -170,15 +208,35 @@ final class Auth_Service
     /**
      * Retorna dados do usuario autenticado.
      *
+     * v0.1.4: tenta WP nativo primeiro, fallback legado.
+     *
      * @return array<string, mixed>|WP_Error
      */
     public function me(array $sessao)
     {
-        $usuario = $this->find_usuario_by_id((string) $sessao['usuario_id']);
+        $uid = (string) $sessao['usuario_id'];
+
+        // Caminho 1: WP nativo.
+        if (ctype_digit($uid)) {
+            $wp_user = $this->find_wp_user_by_id((int) $uid);
+            if ($wp_user !== null) {
+                $apagada = get_user_meta($wp_user->ID, 'gestor_conta_apagada_em', true);
+                if (!empty($apagada)) {
+                    return Response::error('conta_apagada', 'Conta foi apagada', 403);
+                }
+                return $this->wp_user_to_dto($wp_user);
+            }
+        }
+
+        // Caminho 2: legado.
+        $usuario = $this->find_usuario_by_id($uid);
         if ($usuario === null) {
             return Response::error('usuario_nao_encontrado', 'Usuario nao encontrado', 404);
         }
-        return $this->usuario_to_dto($usuario);
+        if ($usuario['conta_apagada_em'] !== null) {
+            return Response::error('conta_apagada', 'Conta foi apagada', 403);
+        }
+        return $this->legacy_usuario_to_dto($usuario);
     }
 
     /**
@@ -218,6 +276,48 @@ final class Auth_Service
     }
 
     /**
+     * v0.1.4: busca user do WordPress (wp_users) por email.
+     * Retorna WP_User se existir e tiver capability de uso da API, null caso contrario.
+     *
+     * @return \WP_User|null
+     */
+    private function find_wp_user_by_email(string $email)
+    {
+        $user = get_user_by('email', $email);
+        if (!($user instanceof \WP_User)) {
+            return null;
+        }
+        // Bloqueia login se conta foi marcada como apagada (LGPD).
+        $apagada = get_user_meta($user->ID, 'gestor_conta_apagada_em', true);
+        if (!empty($apagada)) {
+            return null;
+        }
+        return $user;
+    }
+
+    /**
+     * v0.1.4: busca user do WordPress por ID.
+     *
+     * @return \WP_User|null
+     */
+    private function find_wp_user_by_id(int $id)
+    {
+        $user = get_user_by('id', $id);
+        return ($user instanceof \WP_User) ? $user : null;
+    }
+
+    /**
+     * v0.1.4: verifica se user WP tem permissao pra usar a API do Gestor.
+     * Aceita: capability 'gestor_api_use' OU capability 'manage_options' (admin WP).
+     */
+    private function wp_user_can_use_api(\WP_User $user): bool
+    {
+        if (user_can($user, 'gestor_api_use')) return true;
+        if (user_can($user, 'manage_options')) return true; // admin WP sempre pode
+        return false;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     private function find_usuario_by_email(string $email): ?array
@@ -248,12 +348,35 @@ final class Auth_Service
     }
 
     /**
-     * Converte row do banco pra DTO de saida.
+     * v0.1.4: DTO a partir de WP_User.
+     * @return array<string, mixed>
+     */
+    private function wp_user_to_dto(\WP_User $user): array
+    {
+        return [
+            'id' => (string) $user->ID,
+            'email' => $user->user_email,
+            'nome' => $user->display_name,
+            'fuso' => get_user_meta($user->ID, 'gestor_fuso', true) ?: 'America/Sao_Paulo',
+            'horario_trab_inicio' => get_user_meta($user->ID, 'gestor_horario_inicio', true) ?: '08:00',
+            'horario_trab_fim' => get_user_meta($user->ID, 'gestor_horario_fim', true) ?: '18:00',
+            'dias_trabalho' => json_decode((string) get_user_meta($user->ID, 'gestor_dias_trabalho', true), true) ?: [1, 2, 3, 4, 5],
+            'tom_cobranca' => get_user_meta($user->ID, 'gestor_tom_cobranca', true) ?: 'PROFISSIONAL',
+            'ia_habilitada' => (bool) get_user_meta($user->ID, 'gestor_ia_habilitada', true),
+            'criado_em' => $this->to_iso8601((string) $user->user_registered),
+            'atualizado_em' => gmdate('Y-m-d\TH:i:s.v\Z'),
+            'versao' => 1,
+            'origem' => 'wp',
+        ];
+    }
+
+    /**
+     * Converte row do banco legado pra DTO de saida.
      *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    private function usuario_to_dto(array $row): array
+    private function legacy_usuario_to_dto(array $row): array
     {
         return [
             'id' => $row['id'],
@@ -268,7 +391,18 @@ final class Auth_Service
             'criado_em' => $this->to_iso8601($row['criado_em']),
             'atualizado_em' => $this->to_iso8601($row['atualizado_em']),
             'versao' => (int) $row['versao'],
+            'origem' => 'legacy',
         ];
+    }
+
+    /**
+     * @deprecated 0.1.4 Manter por compat. Use legacy_usuario_to_dto() / wp_user_to_dto().
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function usuario_to_dto(array $row): array
+    {
+        return $this->legacy_usuario_to_dto($row);
     }
 
     private function to_iso8601(string $mysql_datetime): string

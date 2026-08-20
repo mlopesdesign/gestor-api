@@ -4,7 +4,7 @@ Tags: rest-api, gestor, sync
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 8.0
-Stable tag: 0.1.3
+Stable tag: 0.1.4
 License: Proprietary
 License URI: https://mlopesdesign.com.br
 
@@ -65,6 +65,15 @@ O plugin usa colunas LONGTEXT para campos JSON. Funciona em qualquer MySQL 5.6+.
 Nao nesta versao. O sync com o desktop esta BLOQUEADO ate Marcio liberar (ver `AGENTS.md` raiz §9.1).
 
 == Changelog ==
+
+= 0.1.4 = 2026-08-19 =
+* NEW: Autenticacao via usuarios nativos do WordPress (`wp_users`). Capability custom `gestor_api_use` (uso da API) e `gestor_api_manage` (admin do plugin). Login tenta WP primeiro via `wp_check_password`, fallback pra tabela legada `wp_gestor_usuarios` (mantida por compat).
+* NEW: `gestor_api_use` adicionada ao role `administrator` automaticamente na ativacao. Pra criar usuario com acesso so a API, criar WP user comum + dar a cap `gestor_api_use`.
+* NEW: LGPD (apagar conta) funciona pra users WP (seta user meta `gestor_conta_apagada_em` + limpa email + revoga sessoes) e pra users legados.
+* NEW: campo `origem` no DTO de `/auth/me` e `/auth/login`: `'wp'` ou `'legacy'`. Ajuda o app a saber em que sistema o user foi autenticado.
+* CHG: capability `gestor_api_use` separada de `gestor_api_manage` (que continua sendo so pra admin do plugin)
+* CHG: Bump de versao (regra PADRAO-ML-LOPES-DESIGN.md §12)
+* BUGFIX: agora o WP user que NAO tem capability `gestor_api_use` recebe 401 generico (sem vazar existencia de conta)
 
 = 0.1.3 = 2026-08-18 =
 * FIX: triggers de auditoria append-only NAO eram criados. Causa: `$wpdb->query()` usa `mysqli_query()` que NAO aceita multi-statement. `install_triggers()` mandava `DROP TRIGGER` + `CREATE TRIGGER` na mesma string. Fix: separar em 2 chamadas (`DROP` em uma, `CREATE` em outra — `BEGIN...END` eh 1 statement unico)

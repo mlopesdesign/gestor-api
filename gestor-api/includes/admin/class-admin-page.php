@@ -75,6 +75,13 @@ final class Admin_Page
         echo '<h1>' . esc_html__('Gestor API', 'gestor-api') . '</h1>';
         echo '<p>' . esc_html(sprintf('Versao do plugin: %s', GESTOR_API_VERSION)) . '</p>';
 
+        // v0.1.4: nota sobre o novo fluxo WP nativo.
+        echo '<div class="notice notice-info inline"><p>';
+        echo '<strong>v0.1.4:</strong> Autenticacao agora usa usuarios nativos do WordPress (<code>wp_users</code>). ';
+        echo 'Para que um user consiga logar no app Android ou na sincronizacao do desktop, ele precisa ter a capability <code>gestor_api_use</code>. ';
+        echo 'O role <code>administrator</code> ja tem essa cap automaticamente. Para dar a outros users, va em <em>Users &gt; All Users &gt; Edit &gt; Role</em> (ou use o form abaixo para criar um user novo com a cap).';
+        echo '</p></div>';
+
         // Form para criar usuario inicial (sem precisar de WP-CLI ou endpoint REST).
         echo '<h2>' . esc_html__('Criar usuario Gestor', 'gestor-api') . '</h2>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="max-width:520px;margin-bottom:24px;">';
@@ -233,6 +240,10 @@ final class Admin_Page
 
     /**
      * Handler: cria usuario Gestor (form no admin page).
+     *
+     * v0.1.4: cria como WP user nativo (wp_users) com cap gestor_api_use,
+     * em vez de criar na tabela legada wp_gestor_usuarios. Isso permite
+     * que o user use a mesma senha no admin WP (se for admin) e na API.
      */
     public static function handle_create_user(): void
     {
@@ -241,24 +252,57 @@ final class Admin_Page
         }
         check_admin_referer('gestor_api_create_user');
 
-        $email = (string) ($_POST['email'] ?? '');
-        $nome  = (string) ($_POST['nome'] ?? '');
+        $email = sanitize_email((string) ($_POST['email'] ?? ''));
+        $nome  = sanitize_text_field((string) ($_POST['nome'] ?? ''));
         $senha = (string) ($_POST['senha'] ?? '');
 
         $redirect_args = ['page' => self::MENU_SLUG];
-        try {
-            $model = new Usuario();
-            $id = $model->criar([
-                'email' => $email,
-                'nome'  => $nome,
-                'senha' => $senha,
-            ]);
-            $redirect_args['gestor_api_ok'] = 1;
-            $redirect_args['gestor_api_msg'] = sprintf('Usuario %s criado (id=%s)', $email, $id);
-        } catch (\Throwable $e) {
+
+        if ($email === '' || $nome === '' || strlen($senha) < 8) {
             $redirect_args['gestor_api_ok'] = 0;
-            $redirect_args['gestor_api_msg'] = 'Erro: ' . $e->getMessage();
+            $redirect_args['gestor_api_msg'] = 'Preencha todos os campos. Senha min 8 chars.';
+            wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+            exit;
         }
+
+        // Se ja existe WP user com esse email, so da a cap e sai.
+        $existing = get_user_by('email', $email);
+        if ($existing instanceof \WP_User) {
+            $existing->add_cap('gestor_api_use');
+            $redirect_args['gestor_api_ok'] = 1;
+            $redirect_args['gestor_api_msg'] = sprintf(
+                'User WP ja existia (id=%d). Cap gestor_api_use adicionada.',
+                $existing->ID
+            );
+            wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+            exit;
+        }
+
+        // Cria WP user normal.
+        $user_id = wp_create_user($email, $senha, $email);
+        if (is_wp_error($user_id)) {
+            $redirect_args['gestor_api_ok'] = 0;
+            $redirect_args['gestor_api_msg'] = 'Erro ao criar WP user: ' . $user_id->get_error_message();
+            wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+            exit;
+        }
+
+        // Atualiza display name e da a cap.
+        wp_update_user([
+            'ID' => $user_id,
+            'display_name' => $nome,
+            'first_name' => $nome,
+            'nickname' => $nome,
+        ]);
+        $user = new \WP_User($user_id);
+        $user->add_cap('gestor_api_use');
+
+        $redirect_args['gestor_api_ok'] = 1;
+        $redirect_args['gestor_api_msg'] = sprintf(
+            'User WP criado (id=%d, email=%s) com cap gestor_api_use. Faca login no app com email+senha.',
+            $user_id,
+            $email
+        );
         wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
         exit;
     }

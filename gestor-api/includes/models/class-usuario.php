@@ -141,15 +141,38 @@ final class Usuario
 
     /**
      * LGPD: apaga conta do usuario (soft-delete + cascade via FK).
+     *
+     * v0.1.4: se $usuario_id for numerico (ID WP), bloqueia user WP
+     * via user meta e revoga sessoes. Senao, soft-delete legado.
      */
     public function apagar_conta(string $usuario_id): bool
     {
-        $now = current_time('mysql', true);
+        $now_iso = gmdate('Y-m-d H:i:s');
+
+        // v0.1.4: user WP (id numerico)
+        if (ctype_digit($usuario_id)) {
+            $wp_user_id = (int) $usuario_id;
+            $user = get_user_by('id', $wp_user_id);
+            if ($user instanceof \WP_User) {
+                update_user_meta($wp_user_id, 'gestor_conta_apagada_em', $now_iso);
+                // Limpa email pra nao permitir novo cadastro com mesmo email
+                $novo_email = 'deleted-' . $wp_user_id . '-' . wp_generate_password(8, false) . '@deleted.local';
+                wp_update_user([
+                    'ID' => $wp_user_id,
+                    'user_email' => $novo_email,
+                ]);
+                // Revoga todas as sessoes
+                (new \Gestor_Api\Auth\Token_Repository())->revoke_all_for_user($usuario_id);
+                return true;
+            }
+        }
+
+        // Legado
         $result = $this->wpdb->update(
             Schema::table('usuarios'),
             [
-                'conta_apagada_em' => $now,
-                'atualizado_em' => $now,
+                'conta_apagada_em' => $now_iso,
+                'atualizado_em' => $now_iso,
                 'email' => 'deleted-' . $usuario_id . '@deleted.local',
             ],
             ['id' => $usuario_id],

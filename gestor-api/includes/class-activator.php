@@ -58,13 +58,20 @@ final class Activator
 
     /**
      * Cria capabilities customizadas em roles conhecidas.
+     *
+     * v0.1.4: adicionada 'gestor_api_use' — capacidade de USAR a API
+     * (login, sync). Separada de 'gestor_api_manage' (admin do plugin).
+     * Ambas vao no role 'administrator' por padrao, mas 'gestor_api_use'
+     * pode ser dada a roles custom (ex: 'subscriber_gestor') pra criar
+     * usuarios com acesso so a API, sem poderes WP.
      */
     private static function install_capabilities(): void
     {
         $caps = [
-            'gestor_api_manage',
+            'gestor_api_manage',       // admin do plugin (cria users, revoga tokens, etc)
             'gestor_api_view_users',
             'gestor_api_revoke_tokens',
+            'gestor_api_use',          // NOVO v0.1.4: usar API (login, sync CRUD)
         ];
         $roles = ['administrator'];
 
